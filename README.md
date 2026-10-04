@@ -28,6 +28,8 @@ Payload CMS provides an excellent schema localization engine (`localized: true`)
 4. **Lexical Rich Text AST Preservation**: Traverses Lexical JSON text leaves while keeping headings, links, tables, and custom blocks structurally intact.
 5. **Direct PostgreSQL Bulk Crawler**: Includes a standalone CLI tool that crawls PostgreSQL tables directly, backfilling millions of words across existing websites in minutes with zero API overhead.
 
+> 📖 **Full Guide**: For a complete walkthrough of configuring environment variables, Next.js transpilation, CLI backfill, and production Docker setups, see the [Comprehensive Integration Guide](docs/INTEGRATION_GUIDE.md).
+
 ---
 
 ## Requirements
