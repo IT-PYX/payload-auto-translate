@@ -1,11 +1,13 @@
-# @itpyx/payload-auto-translate
-
 <div align="center">
+
+<h1 align="center">payload-auto-translate</h1>
 
 [![npm version](https://img.shields.io/npm/v/@itpyx/payload-auto-translate.svg?style=flat-square)](https://www.npmjs.com/package/@itpyx/payload-auto-translate)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Payload CMS 3.x](https://img.shields.io/badge/Payload%20CMS-3.x-black?style=flat-square&logo=payloadcms)](https://payloadcms.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
+
+<br />
 
 **High-performance automated multi-language translation plugin for [Payload CMS 3.x](https://payloadcms.com/)**
 
