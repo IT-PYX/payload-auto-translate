@@ -42,7 +42,7 @@
     }
   },
   "bin": {
-    "payload-auto-translate": "./dist/crawler/run-bulk.js"
+    "payload-auto-translate": "dist/crawler/run-bulk.js"
   },
   "files": [
     "dist",
