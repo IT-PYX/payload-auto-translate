@@ -1,0 +1,77 @@
+{
+  "name": "@itpyx/payload-auto-translate",
+  "version": "1.0.0",
+  "description": "High-performance auto-translation plugin for Payload CMS 3.x with LibreTranslate, Lexical Rich Text AST compression, debounced background worker queue, SEO slugification, and direct PostgreSQL bulk crawler.",
+  "license": "MIT",
+  "type": "module",
+  "author": "IT-PYX",
+  "homepage": "https://github.com/IT-PYX/payload-auto-translate#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IT-PYX/payload-auto-translate.git"
+  },
+  "bugs": {
+    "url": "https://github.com/IT-PYX/payload-auto-translate/issues"
+  },
+  "keywords": [
+    "payload",
+    "payloadcms",
+    "payload-plugin",
+    "translation",
+    "auto-translate",
+    "i18n",
+    "localization",
+    "libretranslate",
+    "postgresql",
+    "lexical",
+    "seo-slugs"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./crawler": {
+      "types": "./dist/crawler/database-crawler.d.ts",
+      "import": "./dist/crawler/database-crawler.js",
+      "default": "./dist/crawler/database-crawler.js"
+    }
+  },
+  "bin": {
+    "payload-auto-translate": "./dist/crawler/run-bulk.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "node tests/plugin.test.mjs",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "peerDependencies": {
+    "payload": "^3.0.0"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.0",
+    "payload": "3.88.0",
+    "tsup": "^8.3.6",
+    "tsx": "^4.22.4",
+    "typescript": "^5.7.3"
+  }
+}
