@@ -172,18 +172,35 @@ test('3. SEO Slugifier (slugifier.ts)', async (t) => {
   });
 
   await t.test('supports native Unicode slugs when latinLocalesOnly: false', () => {
-    const ruSlug = defaultSlugify('Кондиционеры инверторные', 'ru', { latinLocalesOnly: false });
-    assert.equal(ruSlug, 'кондиционеры-инверторные');
+    // Russian with short-i (й) preservation (NFC composed)
+    const ruSlug = defaultSlugify('Инверторный сплит-кондиционер', 'ru', { latinLocalesOnly: false });
+    assert.equal(ruSlug, 'инверторный-сплит-кондиционер');
 
-    const arSlug = defaultSlugify('مكيف الهواء الذکی', 'ar', { latinLocalesOnly: false });
-    assert.equal(arSlug, 'مكيف-الهواء-الذکی');
+    // Arabic with hamza preservation (NFC composed)
+    const arSlug = defaultSlugify(
+      'كيف يؤدي التوريد المباشر للمصنع إلى تعطيل التوزيع التقليدي لأنظمة التدفئة والتهوية وتكييف الهواء',
+      'ar',
+      { latinLocalesOnly: false, maxLength: 120 },
+    );
+    assert.equal(
+      arSlug,
+      'كيف-يؤدي-التوريد-المباشر-للمصنع-إلى-تعطيل-التوزيع-التقليدي-لأنظمة-التدفئة-والتهوية-وتكييف-الهواء',
+    );
+
+    // Japanese Kanji & Katakana
+    const jaSlug = defaultSlugify('品質', 'ja', { latinLocalesOnly: false });
+    assert.equal(jaSlug, '品質');
   });
 
-  await t.test('clamps long slugs at word/hyphen boundary', () => {
+  await t.test('clamps long slugs safely at word/hyphen boundary without splitting Unicode characters', () => {
     const longTitle = 'This is a very long title that exceeds ninety characters by quite a bit and should be trimmed safely at hyphen';
     const slug = defaultSlugify(longTitle, 'en', { maxLength: 50 });
     assert.ok(slug.length <= 50);
     assert.ok(!slug.endsWith('-'));
+
+    const longJa = '品質管理と製造工程の徹底的な検査および国際認証基準の遵守に関する詳細な分析レポート';
+    const jaClamped = defaultSlugify(longJa, 'ja', { latinLocalesOnly: false, maxLength: 20 });
+    assert.ok(Array.from(jaClamped).length <= 20);
   });
 });
 

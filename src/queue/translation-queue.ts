@@ -199,10 +199,27 @@ export class TranslationQueue {
         // 4. Handle optional slug translation if enabled and field is localized
         if (translateSlugConfig && job.entityType === 'collection') {
           const collectionConfig = this.payload.collections[job.slug]?.config
-          const slugField = collectionConfig?.fields?.find(
-            (f: any) =>
-              f.name === (this.slugOptions?.sourceField || 'slug') || f.name === 'slug',
-          )
+          
+          const findField = (fields: any[] = [], targetName: string): any => {
+            for (const f of fields) {
+              if (f?.name === targetName) return f
+              if (Array.isArray(f?.fields)) {
+                const sub = findField(f.fields, targetName)
+                if (sub) return sub
+              }
+              if (Array.isArray(f?.tabs)) {
+                for (const t of f.tabs) {
+                  if (Array.isArray(t?.fields)) {
+                    const sub = findField(t.fields, targetName)
+                    if (sub) return sub
+                  }
+                }
+              }
+            }
+            return null
+          }
+
+          const slugField = findField(collectionConfig?.fields, 'slug')
 
           // Only translate slug if the field is localized on this collection
           if (slugField && 'localized' in slugField && slugField.localized) {
@@ -211,7 +228,9 @@ export class TranslationQueue {
 
             // Only compute translated slug if target slug is empty or equals the default source slug
             if (!existingSlug || existingSlug === sourceSlug) {
+              const configuredTitleField = this.slugOptions?.sourceField
               const sourceTitle =
+                (configuredTitleField && (translatedData[configuredTitleField] || job.data?.[configuredTitleField])) ||
                 translatedData.title ||
                 translatedData.name ||
                 job.data?.title ||
