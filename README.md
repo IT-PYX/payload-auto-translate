@@ -153,6 +153,8 @@ export default nextConfig
 | `slug.slugify` | `function` | Built-in SEO slugifier | Custom function: `(title, locale, currentSlug) => string`. |
 | `customFieldExclusions` | `string[]` | `[]` | Field names to exclude from translation globally. |
 | `customValueExclusions` | `string[]` | `[]` | Specific text strings to skip during translation globally. |
+| `customValuePatterns` | `(string \| RegExp)[]` | `[]` | Custom regex patterns or strings to skip during translation (e.g. hardware specs like `[/^IP\d+/, /^RS-?485/i]`). |
+| `fallbackRetry` | `FallbackRetryOptions` | `{ enabled: false }` | Optional fallback retry for strings returning untranslated (e.g., Title Cased headlines). |
 | `collections` | `Record<string, boolean \| CollectionConfigOptions>` | Auto-detected | Selectively enable, exclude fields, or toggle slug translation per collection. |
 | `globals` | `Record<string, boolean \| CollectionConfigOptions>` | Auto-detected | Selectively enable or exclude fields per global. |
 | `disabled` | `boolean` | `false` | Master kill-switch to temporarily disable the plugin. |
@@ -186,7 +188,13 @@ pnpm payload-auto-translate --live
 # 3. Limit translation to specific tables:
 pnpm payload-auto-translate --live --tables=pages,products
 
-# 4. Custom .env file path:
+# 4. Enable fallback retry for Title Case / Headline echoes:
+pnpm payload-auto-translate --live --fallback-retry --fallback-strategy=sentence-case
+
+# 5. Skip domain-specific tokens or hardware specs via patterns:
+pnpm payload-auto-translate --live --value-patterns="/^IP\d+$/i,/^RS-?485$/i"
+
+# 6. Custom .env file path:
 pnpm payload-auto-translate --live --env=/path/to/.env
 ```
 

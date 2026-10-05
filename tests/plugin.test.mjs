@@ -138,6 +138,17 @@ test('2. Filter & Exclusions (filter.ts)', async (t) => {
     assert.equal(shouldSkipValue('ACME_CORP', customVals), true);
     assert.equal(shouldSkipValue('Normal Text', customVals), false);
   });
+  await t.test('supports customValuePatterns (RegExp and strings) for hardware specs & tokens', () => {
+    const patterns = [/^IP[0-9]{2}$/i, /^RS-?485$/i, /^SUS\s*(304|316)$/i, '^DC\\s*\\d+V?$'];
+    assert.equal(shouldSkipValue('IP65', undefined, patterns), true);
+    assert.equal(shouldSkipValue('IP68', undefined, patterns), true);
+    assert.equal(shouldSkipValue('RS485', undefined, patterns), true);
+    assert.equal(shouldSkipValue('RS-485', undefined, patterns), true);
+    assert.equal(shouldSkipValue('SUS304', undefined, patterns), true);
+    assert.equal(shouldSkipValue('SUS 316', undefined, patterns), true);
+    assert.equal(shouldSkipValue('DC 24V', undefined, patterns), true);
+    assert.equal(shouldSkipValue('Standard Turnstile Door', undefined, patterns), false);
+  });
 });
 
 test('3. SEO Slugifier (slugifier.ts)', async (t) => {
@@ -155,7 +166,7 @@ test('3. SEO Slugifier (slugifier.ts)', async (t) => {
   });
 
   await t.test('safely falls back for non-Latin locales when latinLocalesOnly: true', () => {
-    assert.equal(defaultSlugify('مكيف الهواء الذكي', 'ar', { latinLocalesOnly: true }), '');
+    assert.equal(defaultSlugify('مكيف الهواء الذکی', 'ar', { latinLocalesOnly: true }), '');
     assert.equal(defaultSlugify('インバーターエアコン', 'ja', { latinLocalesOnly: true }), '');
     assert.equal(defaultSlugify('Кондиционеры инверторные', 'ru', { latinLocalesOnly: true }), '');
   });
@@ -164,8 +175,8 @@ test('3. SEO Slugifier (slugifier.ts)', async (t) => {
     const ruSlug = defaultSlugify('Кондиционеры инверторные', 'ru', { latinLocalesOnly: false });
     assert.equal(ruSlug, 'кондиционеры-инверторные');
 
-    const arSlug = defaultSlugify('مكيف الهواء الذكي', 'ar', { latinLocalesOnly: false });
-    assert.equal(arSlug, 'مكيف-الهواء-الذكي');
+    const arSlug = defaultSlugify('مكيف الهواء الذکی', 'ar', { latinLocalesOnly: false });
+    assert.equal(arSlug, 'مكيف-الهواء-الذکی');
   });
 
   await t.test('clamps long slugs at word/hyphen boundary', () => {
@@ -195,6 +206,19 @@ test('4. Block ID Localizer & Database Safety (localizeItemIds)', async (t) => {
     assert.equal(item.items[0].id, 'item_a_es');
   });
 
+  await t.test('strips multiple chained suffixes if encountered from legacy data', () => {
+    const chainedItem = {
+      id: 'block_hero_1_es_fr_ar_pt_de_ru_ja',
+      blockType: 'hero',
+      items: [
+        { id: 'item_a_es_fr_ar', label: 'Item A' },
+      ],
+    };
+    localizeItemIds(chainedItem, 'ja');
+    assert.equal(chainedItem.id, 'block_hero_1_ja');
+    assert.equal(chainedItem.items[0].id, 'item_a_ja');
+  });
+
   await t.test('deletes numeric/serial IDs so database autoincrement sequence takes over', () => {
     const item = {
       id: 105, // Numeric serial primary key in PostgreSQL table
@@ -206,5 +230,41 @@ test('4. Block ID Localizer & Database Safety (localizeItemIds)', async (t) => {
     localizeItemIds(item, 'es');
     assert.equal(item.id, undefined);
     assert.equal(item.slides[0].id, undefined);
+  });
+});
+
+test('5. Document Extraction & Application with Custom Patterns', async (t) => {
+  await t.test('extractTranslatableStrings respects customValuePatterns', () => {
+    const doc = {
+      title: 'Flap Barrier Turnstile',
+      rating: 'IP65',
+      protocol: 'RS485',
+      material: 'SUS304',
+      description: 'High speed gate with robust construction',
+    };
+    const patterns = [/^IP\d+$/i, /^RS-?485$/i, /^SUS\s*(304|316)$/i];
+    const strings = extractTranslatableStrings(doc, new Set(), new Set(), false, undefined, patterns);
+
+    assert.ok(strings.has('Flap Barrier Turnstile'));
+    assert.ok(strings.has('High speed gate with robust construction'));
+    assert.ok(!strings.has('IP65'));
+    assert.ok(!strings.has('RS485'));
+    assert.ok(!strings.has('SUS304'));
+  });
+
+  await t.test('mergePreservingExisting handles existing blocks with chained suffixes', () => {
+    const translated = {
+      sections: [
+        { id: 'hero_1', blockType: 'hero', title: 'Japanese Hero' },
+      ],
+    };
+    const existing = {
+      sections: [
+        { id: 'hero_1_es_fr_ar_ja', blockType: 'hero', title: 'Existing Japanese Hero' },
+      ],
+    };
+    const merged = mergePreservingExisting(translated, existing);
+    assert.equal(merged.sections.length, 1);
+    assert.equal(merged.sections[0].title, 'Existing Japanese Hero');
   });
 });

@@ -1,5 +1,5 @@
 import type { Payload } from 'payload'
-import type { CollectionConfigOptions, SlugTranslationOptions, TranslationJob } from '../types'
+import type { CollectionConfigOptions, FallbackRetryOptions, SlugTranslationOptions, TranslationJob } from '../types'
 import { translateDocument, mergePreservingExisting } from '../engine/document-translator'
 import { defaultSlugify } from '../engine/slugifier'
 
@@ -19,6 +19,8 @@ export interface TranslationQueueOptions {
   excludedFieldsMap?: Record<string, string[]>
   customFieldExclusions?: string[]
   customValueExclusions?: string[]
+  customValuePatterns?: (string | RegExp)[]
+  fallbackRetry?: FallbackRetryOptions
   slug?: SlugTranslationOptions
   collections?: Record<string, boolean | CollectionConfigOptions>
 }
@@ -34,6 +36,8 @@ export class TranslationQueue {
   private excludedFieldsMap: Map<string, string[]> = new Map()
   private customFieldExclusions?: string[]
   private customValueExclusions?: string[]
+  private customValuePatterns?: (string | RegExp)[]
+  private fallbackRetry?: FallbackRetryOptions
   private slugOptions?: SlugTranslationOptions
   private collectionsConfig?: Record<string, boolean | CollectionConfigOptions>
   private concurrency: number
@@ -51,6 +55,8 @@ export class TranslationQueue {
     this.concurrency = options.concurrency || 2
     this.customFieldExclusions = options.customFieldExclusions
     this.customValueExclusions = options.customValueExclusions
+    this.customValuePatterns = options.customValuePatterns
+    this.fallbackRetry = options.fallbackRetry
     this.slugOptions = options.slug
     this.collectionsConfig = options.collections
     if (options.excludedFieldsMap) {
@@ -183,6 +189,8 @@ export class TranslationQueue {
           excludedFields,
           translateSlugConfig,
           this.customValueExclusions,
+          this.customValuePatterns,
+          this.fallbackRetry,
         )
 
         // 3. Merge: only apply translations where target locale is empty
@@ -277,7 +285,7 @@ export function localizeItemIds(item: any, targetLocale: string): void {
 
   if (typeof item.id === 'string' && item.id.length > 0) {
     // Strip any existing locale suffix before applying targetLocale to prevent chaining (_es_es or _fr_es)
-    const baseId = item.id.replace(/_[a-z]{2}(-[A-Z]{2})?$/, '')
+    const baseId = item.id.replace(/(_[a-z]{2}(-[A-Z]{2})?)+$/, '')
     item.id = `${baseId}_${targetLocale}`
   } else if (typeof item.id === 'number') {
     // For integer/serial primary keys, delete to allow database sequence autogeneration

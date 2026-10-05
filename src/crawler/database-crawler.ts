@@ -22,6 +22,9 @@ export class DatabaseCrawler {
       isLive: options.isLive ?? true,
       includeVersions: options.includeVersions ?? false,
       onlyTables: options.onlyTables,
+      customValueExclusions: options.customValueExclusions,
+      customValuePatterns: options.customValuePatterns,
+      fallbackRetry: options.fallbackRetry,
       onProgress: options.onProgress,
       connectionString: options.connectionString || process.env.DATABASE_URL,
     }
@@ -71,6 +74,10 @@ export class DatabaseCrawler {
     const engineUrl = this.options.engineUrl!
     const isLive = this.options.isLive!
     const includeVersions = this.options.includeVersions !== false
+    const valExclusionsSet = this.options.customValueExclusions
+      ? new Set(this.options.customValueExclusions)
+      : undefined
+    const valPatterns = this.options.customValuePatterns
 
     this.updateProgress({
       status: 'running',
@@ -193,12 +200,15 @@ export class DatabaseCrawler {
           const findTargetRow = (sourceRow: any, targetLocale: string) => {
             const isIdString = typeof sourceRow.id === 'string'
             const isParentIdString = typeof sourceRow._parent_id === 'string'
-            const targetId = isIdString ? `${sourceRow.id}_${targetLocale}` : null
-            const targetUuid = typeof sourceRow._uuid === 'string' ? `${sourceRow._uuid}_${targetLocale}` : null
+            const cleanId = isIdString ? sourceRow.id.replace(/(_[a-z]{2}(-[A-Z]{2})?)+$/, '') : null
+            const targetId = isIdString ? `${cleanId}_${targetLocale}` : null
+            const cleanUuid = typeof sourceRow._uuid === 'string' ? sourceRow._uuid.replace(/(_[a-z]{2}(-[A-Z]{2})?)+$/, '') : null
+            const targetUuid = cleanUuid ? `${cleanUuid}_${targetLocale}` : null
+            const cleanParentId = isParentIdString ? sourceRow._parent_id.replace(/(_[a-z]{2}(-[A-Z]{2})?)+$/, '') : null
             const targetParentId =
               sourceRow._parent_id !== undefined
                 ? isParentIdString && parentIsLocalized
-                  ? `${sourceRow._parent_id}_${targetLocale}`
+                  ? `${cleanParentId}_${targetLocale}`
                   : sourceRow._parent_id
                 : null
             if (isIdString && targetId) return existingRowsById.get(targetId)
@@ -213,7 +223,7 @@ export class DatabaseCrawler {
             const isNeeded = sourceRows.some((sourceRow) => {
               const existing = findTargetRow(sourceRow, targetLocale)
               if (!existing) return true
-              return sourceRowHasUntranslatedFields(sourceRow, existing, columns)
+              return sourceRowHasUntranslatedFields(sourceRow, existing, columns, valExclusionsSet, valPatterns)
             })
             if (isNeeded) {
               localesNeedingTranslation.push(targetLocale)
@@ -236,7 +246,7 @@ export class DatabaseCrawler {
             if (isLexicalNode(val)) {
               const leaves = extractLexicalTextNodes(val)
               for (const str of leaves.values()) {
-                if (!shouldSkipValue(str)) localeSet.add(str)
+                if (!shouldSkipValue(str, valExclusionsSet, valPatterns)) localeSet.add(str)
               }
             }
           }
@@ -250,7 +260,7 @@ export class DatabaseCrawler {
                   const val = sourceRow[col.name]
                   if (col.type === 'jsonb' || col.type === 'json') {
                     collectLexical(localeSet, val)
-                  } else if (typeof val === 'string' && val.trim() && !shouldSkipValue(val)) {
+                  } else if (typeof val === 'string' && val.trim() && !shouldSkipValue(val, valExclusionsSet, valPatterns)) {
                     localeSet.add(val)
                   }
                 }
@@ -265,11 +275,11 @@ export class DatabaseCrawler {
                     val &&
                     (!cur ||
                       JSON.stringify(cur) === JSON.stringify(val) ||
-                      hasUntranslatedLexicalNodes(val, cur))
+                      hasUntranslatedLexicalNodes(val, cur, valExclusionsSet, valPatterns))
                   ) {
                     collectLexical(localeSet, val)
                   }
-                } else if (typeof val === 'string' && val.trim() && !shouldSkipValue(val)) {
+                } else if (typeof val === 'string' && val.trim() && !shouldSkipValue(val, valExclusionsSet, valPatterns)) {
                   if (!cur || cur === val) localeSet.add(val)
                 }
               }
@@ -312,18 +322,22 @@ export class DatabaseCrawler {
                   failedStrings: (this.currentProgress.failedStrings || 0) + (failedCount || 0),
                 })
               },
+              this.options.fallbackRetry,
             )
 
             // Update / Insert rows into table
             for (const sourceRow of sourceRows) {
               const isIdString = typeof sourceRow.id === 'string'
               const isParentIdString = typeof sourceRow._parent_id === 'string'
-              const targetId = isIdString ? `${sourceRow.id}_${targetLocale}` : null
-              const targetUuid = typeof sourceRow._uuid === 'string' ? `${sourceRow._uuid}_${targetLocale}` : null
+              const cleanId = isIdString ? sourceRow.id.replace(/(_[a-z]{2}(-[A-Z]{2})?)+$/, '') : null
+              const targetId = isIdString ? `${cleanId}_${targetLocale}` : null
+              const cleanUuid = typeof sourceRow._uuid === 'string' ? sourceRow._uuid.replace(/(_[a-z]{2}(-[A-Z]{2})?)+$/, '') : null
+              const targetUuid = cleanUuid ? `${cleanUuid}_${targetLocale}` : null
+              const cleanParentId = isParentIdString ? sourceRow._parent_id.replace(/(_[a-z]{2}(-[A-Z]{2})?)+$/, '') : null
               const targetParentId =
                 sourceRow._parent_id !== undefined
                   ? isParentIdString && parentIsLocalized
-                    ? `${sourceRow._parent_id}_${targetLocale}`
+                    ? `${cleanParentId}_${targetLocale}`
                     : sourceRow._parent_id
                   : null
 
@@ -331,7 +345,7 @@ export class DatabaseCrawler {
               if (isIdString && targetId) {
                 existingRow = existingRowsById.get(targetId) || null
               } else if (targetUuid) {
-                existingRow = existingRowsByUuid.get(`${sourceRow._uuid}_${targetLocale}`) || null
+                existingRow = existingRowsByUuid.get(`${targetUuid}`) || null
               } else if (sourceRow._parent_id !== undefined) {
                 existingRow = existingRowsByParent.get(`${targetParentId}_${targetLocale}`) || null
               }
@@ -351,12 +365,12 @@ export class DatabaseCrawler {
                       src &&
                       (!cur ||
                         JSON.stringify(cur) === JSON.stringify(src) ||
-                        hasUntranslatedLexicalNodes(src, cur))
+                        hasUntranslatedLexicalNodes(src, cur, valExclusionsSet, valPatterns))
                     ) {
                       updates[col.name] = applyLexicalTranslations(src, translationMap)
                       needsUpdate = true
                     }
-                  } else if (typeof src === 'string' && src.trim() && !shouldSkipValue(src)) {
+                  } else if (typeof src === 'string' && src.trim() && !shouldSkipValue(src, valExclusionsSet, valPatterns)) {
                     if (!cur || cur === src) {
                       updates[col.name] = translationMap.get(src) || src
                       needsUpdate = true
@@ -400,7 +414,8 @@ export class DatabaseCrawler {
                   } else if (colName === 'id' && isIdString) {
                     newRow[colName] = targetId
                   } else if (colName === '_uuid' && typeof srcVal === 'string' && srcVal.trim()) {
-                    newRow[colName] = srcVal.endsWith(`_${targetLocale}`) ? srcVal : `${srcVal}_${targetLocale}`
+                    const cleanVal = srcVal.replace(/(_[a-z]{2}(-[A-Z]{2})?)+$/, '')
+                    newRow[colName] = `${cleanVal}_${targetLocale}`
                   } else if (colName === '_parent_id') {
                     newRow[colName] = targetParentId
                   } else if (colName === 'published_locale') {
@@ -482,42 +497,59 @@ function sourceRowHasUntranslatedFields(
   src: any,
   cur: any,
   columns: { name: string; type: string }[],
+  customValueExclusions?: Set<string>,
+  customValuePatterns?: (string | RegExp)[],
 ): boolean {
   for (const col of columns) {
     if (!isTranslatableColumn(col)) continue
-    if (fieldNeedsTranslation(src[col.name], cur[col.name], col)) return true
+    if (fieldNeedsTranslation(src[col.name], cur[col.name], col, customValueExclusions, customValuePatterns)) return true
   }
   return false
 }
 
-function fieldNeedsTranslation(src: any, cur: any, col: { name: string; type: string }): boolean {
+function fieldNeedsTranslation(
+  src: any,
+  cur: any,
+  col: { name: string; type: string },
+  customValueExclusions?: Set<string>,
+  customValuePatterns?: (string | RegExp)[],
+): boolean {
   if (col.type === 'jsonb' || col.type === 'json') {
     if (!src) return false
     if (!cur || JSON.stringify(cur) === JSON.stringify(src)) {
-      return hasTranslatableLexicalText(src)
+      return hasTranslatableLexicalText(src, customValueExclusions, customValuePatterns)
     }
-    return hasUntranslatedLexicalNodes(src, cur)
+    return hasUntranslatedLexicalNodes(src, cur, customValueExclusions, customValuePatterns)
   }
-  if (typeof src === 'string' && src.trim() && !shouldSkipValue(src)) {
+  if (typeof src === 'string' && src.trim() && !shouldSkipValue(src, customValueExclusions, customValuePatterns)) {
     return !cur || cur === src
   }
   return false
 }
 
-function hasTranslatableLexicalText(node: any): boolean {
+function hasTranslatableLexicalText(
+  node: any,
+  customValueExclusions?: Set<string>,
+  customValuePatterns?: (string | RegExp)[],
+): boolean {
   if (!isLexicalNode(node)) return false
   for (const str of extractLexicalTextNodes(node).values()) {
-    if (!shouldSkipValue(str)) return true
+    if (!shouldSkipValue(str, customValueExclusions, customValuePatterns)) return true
   }
   return false
 }
 
-function hasUntranslatedLexicalNodes(src: any, cur: any): boolean {
+function hasUntranslatedLexicalNodes(
+  src: any,
+  cur: any,
+  customValueExclusions?: Set<string>,
+  customValuePatterns?: (string | RegExp)[],
+): boolean {
   if (!isLexicalNode(src)) return false
   if (!cur || !isLexicalNode(cur)) return true
   const curTexts = new Set(extractLexicalTextNodes(cur).values())
   for (const str of extractLexicalTextNodes(src).values()) {
-    if (shouldSkipValue(str)) continue
+    if (shouldSkipValue(str, customValueExclusions, customValuePatterns)) continue
     if (str.length >= 20 && str.includes(' ') && curTexts.has(str)) return true
   }
   return false

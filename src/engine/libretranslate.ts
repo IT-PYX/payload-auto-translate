@@ -1,9 +1,24 @@
 import { decodeHtmlEntities } from './filter'
+import type { FallbackRetryOptions } from '../types'
 
 const SCRIPT_PATTERNS: Record<string, RegExp> = {
   ar: /[\u0600-\u06FF\u0750-\u077F]/,
   ru: /[\u0400-\u04FF]/,
   ja: /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF]/,
+}
+
+function isTitleCaseHeadline(text: string): boolean {
+  if (!text || text.length < 8 || !text.includes(' ')) return false
+  const words = text.split(/\s+/).filter((w) => /^[A-Za-z]/.test(w))
+  if (words.length < 2) return false
+  const capitalized = words.filter((w) => /^[A-Z]/.test(w))
+  return capitalized.length / words.length >= 0.6
+}
+
+function toSentenceCase(text: string): string {
+  if (!text) return ''
+  const trimmed = text.trim()
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase()
 }
 
 /**
@@ -124,6 +139,7 @@ export async function translateBatchViaLibre(
   chunkSize = 15,
   maxRetries = 3,
   onChunk?: (succeededCount: number, failedCount: number) => void,
+  fallbackRetry?: FallbackRetryOptions,
 ): Promise<Map<string, string>> {
   const translationMap = new Map<string, string>()
   if (strings.length === 0) return translationMap
@@ -207,14 +223,50 @@ export async function translateBatchViaLibre(
 
     if (translated) {
       let flagged = 0
+      const retryCandidates: { orig: string; transformed: string }[] = []
+
       chunk.forEach((orig, idx) => {
         if (looksUntranslated(translated[idx], orig, targetLocale)) {
-          translationMap.set(orig, orig)
-          flagged++
+          if (fallbackRetry?.enabled && isTitleCaseHeadline(orig)) {
+            const transformed =
+              fallbackRetry.strategy === 'lower-case' ? orig.toLowerCase() : toSentenceCase(orig)
+            retryCandidates.push({ orig, transformed })
+          } else {
+            translationMap.set(orig, orig)
+            flagged++
+          }
         } else {
           translationMap.set(orig, translated[idx])
         }
       })
+
+      // Attempt fallback retry on Title Case echo candidates
+      if (retryCandidates.length > 0) {
+        const transformedList = retryCandidates.map((c) => c.transformed)
+        const retryResults = await attemptChunk(transformedList)
+        if (retryResults && retryResults.length === retryCandidates.length) {
+          retryCandidates.forEach((c, i) => {
+            const res = retryResults[i]
+            if (res && !looksUntranslated(res, c.transformed, targetLocale)) {
+              translationMap.set(c.orig, res)
+            } else {
+              translationMap.set(c.orig, c.orig)
+              flagged++
+            }
+          })
+        } else {
+          for (const c of retryCandidates) {
+            const one = await attemptChunk([c.transformed])
+            if (one && !looksUntranslated(one[0], c.transformed, targetLocale)) {
+              translationMap.set(c.orig, one[0])
+            } else {
+              translationMap.set(c.orig, c.orig)
+              flagged++
+            }
+          }
+        }
+      }
+
       if (onChunk) onChunk(chunk.length - flagged, flagged)
       if (flagged > 0) {
         console.warn(`[auto-translate] ${flagged}/${chunk.length} strings came back untranslated (source echo)`)
@@ -231,6 +283,16 @@ export async function translateBatchViaLibre(
       const one = await attemptChunk([s])
       if (one && !looksUntranslated(one[0], s, targetLocale)) {
         translationMap.set(s, one[0])
+      } else if (fallbackRetry?.enabled && isTitleCaseHeadline(s)) {
+        const transformed =
+          fallbackRetry.strategy === 'lower-case' ? s.toLowerCase() : toSentenceCase(s)
+        const retryOne = await attemptChunk([transformed])
+        if (retryOne && !looksUntranslated(retryOne[0], transformed, targetLocale)) {
+          translationMap.set(s, retryOne[0])
+        } else {
+          translationMap.set(s, s)
+          failed++
+        }
       } else {
         translationMap.set(s, s)
         failed++

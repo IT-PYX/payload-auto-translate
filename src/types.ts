@@ -77,9 +77,21 @@ export interface AutoTranslatePluginOptions {
   customFieldExclusions?: string[]
 
   /**
-   * Custom exact string values to skip during translation.
+   * Custom exact string values, internal tokens, or keywords to skip during translation.
    */
   customValueExclusions?: string[]
+
+  /**
+   * Custom RegExp patterns (or regex strings) to skip during translation.
+   * Useful for domain-specific tokens or hardware specs (e.g. [/^IP\d+/, /^RS-?485/i, /^\d+\s*VAC/i]).
+   */
+  customValuePatterns?: (string | RegExp)[]
+
+  /**
+   * Optional fallback retry configuration for strings that LibreTranslate echoes untranslated (such as Title Cased headlines).
+   * Default: disabled.
+   */
+  fallbackRetry?: FallbackRetryOptions
 
   /**
    * Collections to include or customize
@@ -105,6 +117,22 @@ export interface AutoTranslatePluginOptions {
    * Temporarily disable plugin without removing it
    */
   disabled?: boolean
+}
+
+export interface FallbackRetryOptions {
+  /**
+   * Whether to enable fallback retry when strings return untranslated (such as Title Cased headlines).
+   * Default: false (disabled).
+   */
+  enabled?: boolean
+
+  /**
+   * Strategy for fallback transformation.
+   * 'sentence-case' transforms "Headline Words In Title Case" -> "Headline words in title case" before retrying.
+   * 'lower-case' transforms to lowercase.
+   * Default: 'sentence-case'
+   */
+  strategy?: 'sentence-case' | 'lower-case'
 }
 
 export interface TranslationJob {
@@ -144,5 +172,8 @@ export interface CrawlerOptions {
   onlyTables?: string[]
   includeVersions?: boolean
   isLive?: boolean
+  customValueExclusions?: string[]
+  customValuePatterns?: (string | RegExp)[]
+  fallbackRetry?: FallbackRetryOptions
   onProgress?: (progress: BulkProgress) => void
 }

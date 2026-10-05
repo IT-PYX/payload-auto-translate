@@ -70,7 +70,11 @@ export const SYSTEM_FIELD_EXCLUSIONS = new Set([
 /**
  * Checks if a string value should be skipped during translation.
  */
-export function shouldSkipValue(val: unknown, customValueExclusions?: Set<string>): boolean {
+export function shouldSkipValue(
+  val: unknown,
+  customValueExclusions?: Set<string>,
+  customValuePatterns?: (string | RegExp)[],
+): boolean {
   if (!val || typeof val !== 'string') return true
   const trimmed = val.trim()
   if (!trimmed) return true
@@ -95,6 +99,19 @@ export function shouldSkipValue(val: unknown, customValueExclusions?: Set<string
   // Custom value exclusions
   if (customValueExclusions && (customValueExclusions.has(trimmed) || customValueExclusions.has(trimmed.toLowerCase()))) {
     return true
+  }
+
+  // Custom value patterns (regexes for specs/tokens)
+  if (customValuePatterns && customValuePatterns.length > 0) {
+    for (const pat of customValuePatterns) {
+      if (pat instanceof RegExp) {
+        if (pat.test(trimmed)) return true
+      } else if (typeof pat === 'string' && pat) {
+        try {
+          if (new RegExp(pat, 'i').test(trimmed)) return true
+        } catch {}
+      }
+    }
   }
 
   // UUIDs or ObjectIds

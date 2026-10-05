@@ -1,6 +1,7 @@
 import { isTranslatableField, shouldSkipValue } from './filter'
 import { isLexicalNode, extractLexicalTextNodes } from './lexical-compressor'
 import { translateBatchViaLibre } from './libretranslate'
+import type { FallbackRetryOptions } from '../types'
 
 /**
  * Extracts all distinct translatable strings from an arbitrary document object
@@ -12,12 +13,20 @@ export function extractTranslatableStrings(
   strings: Set<string> = new Set(),
   allowSlug = false,
   customValueExclusions?: Set<string>,
+  customValuePatterns?: (string | RegExp)[],
 ): Set<string> {
   if (!obj || typeof obj !== 'object') return strings
 
   if (Array.isArray(obj)) {
     for (const item of obj) {
-      extractTranslatableStrings(item, excludedFields, strings, allowSlug, customValueExclusions)
+      extractTranslatableStrings(
+        item,
+        excludedFields,
+        strings,
+        allowSlug,
+        customValueExclusions,
+        customValuePatterns,
+      )
     }
     return strings
   }
@@ -26,7 +35,7 @@ export function extractTranslatableStrings(
   if (isLexicalNode(obj)) {
     const textMap = extractLexicalTextNodes(obj)
     for (const text of textMap.values()) {
-      if (!shouldSkipValue(text, customValueExclusions)) {
+      if (!shouldSkipValue(text, customValueExclusions, customValuePatterns)) {
         strings.add(text)
       }
     }
@@ -38,11 +47,18 @@ export function extractTranslatableStrings(
     if (!isTranslatableField(key, excludedFields, allowSlug)) continue
 
     if (typeof value === 'string') {
-      if (!shouldSkipValue(value, customValueExclusions)) {
+      if (!shouldSkipValue(value, customValueExclusions, customValuePatterns)) {
         strings.add(value)
       }
     } else if (typeof value === 'object' && value !== null) {
-      extractTranslatableStrings(value, excludedFields, strings, allowSlug, customValueExclusions)
+      extractTranslatableStrings(
+        value,
+        excludedFields,
+        strings,
+        allowSlug,
+        customValueExclusions,
+        customValuePatterns,
+      )
     }
   }
 
@@ -58,11 +74,12 @@ export function applyTranslationsToDocument(
   excludedFields: Set<string> = new Set(),
   allowSlug = false,
   customValueExclusions?: Set<string>,
+  customValuePatterns?: (string | RegExp)[],
 ): any {
   if (obj === null || obj === undefined) return obj
 
   if (typeof obj !== 'object') {
-    if (typeof obj === 'string' && !shouldSkipValue(obj, customValueExclusions)) {
+    if (typeof obj === 'string' && !shouldSkipValue(obj, customValueExclusions, customValuePatterns)) {
       return translationMap.get(obj) || obj
     }
     return obj
@@ -70,13 +87,20 @@ export function applyTranslationsToDocument(
 
   if (Array.isArray(obj)) {
     return obj.map((item) =>
-      applyTranslationsToDocument(item, translationMap, excludedFields, allowSlug, customValueExclusions),
+      applyTranslationsToDocument(
+        item,
+        translationMap,
+        excludedFields,
+        allowSlug,
+        customValueExclusions,
+        customValuePatterns,
+      ),
     )
   }
 
   // Handle Lexical rich text AST
   if (isLexicalNode(obj)) {
-    return applyLexicalASTWithMap(obj, translationMap, customValueExclusions)
+    return applyLexicalASTWithMap(obj, translationMap, customValueExclusions, customValuePatterns)
   }
 
   // Handle plain objects, blocks, groups
@@ -88,7 +112,7 @@ export function applyTranslationsToDocument(
     }
 
     if (typeof value === 'string') {
-      if (!shouldSkipValue(value, customValueExclusions)) {
+      if (!shouldSkipValue(value, customValueExclusions, customValuePatterns)) {
         result[key] = translationMap.get(value) || value
       } else {
         result[key] = value
@@ -100,6 +124,7 @@ export function applyTranslationsToDocument(
         excludedFields,
         allowSlug,
         customValueExclusions,
+        customValuePatterns,
       )
     } else {
       result[key] = value
@@ -113,16 +138,19 @@ function applyLexicalASTWithMap(
   node: any,
   translationMap: Map<string, string>,
   customValueExclusions?: Set<string>,
+  customValuePatterns?: (string | RegExp)[],
 ): any {
   if (Array.isArray(node)) {
-    return node.map((item) => applyLexicalASTWithMap(item, translationMap, customValueExclusions))
+    return node.map((item) =>
+      applyLexicalASTWithMap(item, translationMap, customValueExclusions, customValuePatterns),
+    )
   } else if (node && typeof node === 'object') {
     const copy: any = { ...node }
     if (
       copy.type === 'text' &&
       typeof copy.text === 'string' &&
       copy.text.trim() &&
-      !shouldSkipValue(copy.text, customValueExclusions)
+      !shouldSkipValue(copy.text, customValueExclusions, customValuePatterns)
     ) {
       const translated = translationMap.get(copy.text)
       if (translated) {
@@ -130,7 +158,12 @@ function applyLexicalASTWithMap(
       }
     }
     for (const k of Object.keys(copy)) {
-      copy[k] = applyLexicalASTWithMap(copy[k], translationMap, customValueExclusions)
+      copy[k] = applyLexicalASTWithMap(
+        copy[k],
+        translationMap,
+        customValueExclusions,
+        customValuePatterns,
+      )
     }
     return copy
   }
@@ -155,7 +188,7 @@ function isValueEmpty(val: any): boolean {
  */
 function getBaseId(item: any): string | null {
   if (!item || typeof item !== 'object' || !item.id) return null
-  return String(item.id).replace(/_[a-z]{2}(-[A-Z]{2})?$/, '')
+  return String(item.id).replace(/(_[a-z]{2}(-[A-Z]{2})?)+$/, '')
 }
 
 function mergeArraysPreservingExisting(translated: any[], existing: any[]): any[] {
@@ -299,6 +332,8 @@ export async function translateDocument(
   excludedFields: string[] = [],
   allowSlug = false,
   customValueExclusions?: string[],
+  customValuePatterns?: (string | RegExp)[],
+  fallbackRetry?: FallbackRetryOptions,
 ): Promise<Record<string, any>> {
   const excludedSet = new Set(excludedFields)
   const valExclusionsSet = customValueExclusions ? new Set(customValueExclusions) : undefined
@@ -310,6 +345,7 @@ export async function translateDocument(
     new Set(),
     allowSlug,
     valExclusionsSet,
+    customValuePatterns,
   )
   const distinctStrings = Array.from(stringSet)
 
@@ -324,6 +360,10 @@ export async function translateDocument(
     sourceLocale,
     engineUrl,
     apiKey,
+    15,
+    3,
+    undefined,
+    fallbackRetry,
   )
 
   // 3. Re-inject translated values into document clone
@@ -333,5 +373,6 @@ export async function translateDocument(
     excludedSet,
     allowSlug,
     valExclusionsSet,
+    customValuePatterns,
   )
 }

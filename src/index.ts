@@ -66,6 +66,8 @@ export const autoTranslatePlugin =
       excludedFieldsMap,
       customFieldExclusions: pluginOptions.customFieldExclusions,
       customValueExclusions: pluginOptions.customValueExclusions,
+      customValuePatterns: pluginOptions.customValuePatterns,
+      fallbackRetry: pluginOptions.fallbackRetry,
       slug: pluginOptions.slug,
       collections: pluginOptions.collections,
     })
@@ -94,6 +96,9 @@ export const autoTranslatePlugin =
       targetLocales,
       onlyTables: bulkOnlyTables,
       includeVersions: pluginOptions.bulk?.includeVersions ?? false,
+      customValueExclusions: pluginOptions.customValueExclusions,
+      customValuePatterns: pluginOptions.customValuePatterns,
+      fallbackRetry: pluginOptions.fallbackRetry,
     })
 
     const hookContext = {
