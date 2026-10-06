@@ -13,6 +13,12 @@ export { translateLexicalAST } from './engine/lexical-compressor'
 export { checkLibreTranslateHealth, translateBatchViaLibre } from './engine/libretranslate'
 export { defaultSlugify } from './engine/slugifier'
 export { isTranslatableField, shouldSkipValue } from './engine/filter'
+export {
+  translateSchemaJSONLD,
+  extractTranslatableSchemaStrings,
+  applySchemaTranslations,
+  localizeSchemaUrl,
+} from './engine/schema-translator'
 
 export const autoTranslatePlugin =
   (pluginOptions: AutoTranslatePluginOptions = {}): Plugin =>
@@ -69,6 +75,7 @@ export const autoTranslatePlugin =
       customValuePatterns: pluginOptions.customValuePatterns,
       fallbackRetry: pluginOptions.fallbackRetry,
       slug: pluginOptions.slug,
+      schema: pluginOptions.schema,
       collections: pluginOptions.collections,
     })
 

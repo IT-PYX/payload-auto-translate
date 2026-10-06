@@ -43,6 +43,44 @@ export interface SlugTranslationOptions {
   slugify?: (title: string, locale: string, currentSlug?: string) => string
 }
 
+export interface SchemaTranslationOptions {
+  /**
+   * Whether to automatically translate and localize custom Schema.org JSON-LD fields.
+   * Default: false (backward compatible).
+   */
+  enabled?: boolean
+
+  /**
+   * Base site URL (e.g. 'https://www.iclimaair.com').
+   * Used to identify and localize internal URLs within JSON-LD.
+   */
+  siteUrl?: string
+
+  /**
+   * Field paths to inspect for schema JSON-LD.
+   * Default: ['meta.schema', 'schema']
+   */
+  fieldPaths?: string[]
+
+  /**
+   * Whether to synchronize the 'overrideDefaultSchema' checkbox flag across locales.
+   * Default: true
+   */
+  syncOverrideFlag?: boolean
+
+  /**
+   * Whether to overwrite existing target locale schema if already present.
+   * Default: false (preserves manual editor adjustments).
+   */
+  overwriteExisting?: boolean
+
+  /**
+   * Optional custom URL localizer: (pathname: string, targetLocale: string) => string.
+   * Default: /${targetLocale}${pathname} (skipping if already prefixed or defaultLocale).
+   */
+  localizePath?: (pathname: string, targetLocale: string) => string
+}
+
 export interface AutoTranslatePluginOptions {
   /**
    * Translation engine configuration.
@@ -70,6 +108,12 @@ export interface AutoTranslatePluginOptions {
    * Default: disabled (slugs remain untouched).
    */
   slug?: SlugTranslationOptions
+
+  /**
+   * Optional Schema.org JSON-LD translation and URL localization configuration.
+   * Default: disabled.
+   */
+  schema?: SchemaTranslationOptions
 
   /**
    * Custom field names to exclude globally across all collections.

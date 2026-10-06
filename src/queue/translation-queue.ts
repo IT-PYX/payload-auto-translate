@@ -1,7 +1,8 @@
 import type { Payload } from 'payload'
-import type { CollectionConfigOptions, FallbackRetryOptions, SlugTranslationOptions, TranslationJob } from '../types'
+import type { CollectionConfigOptions, FallbackRetryOptions, SchemaTranslationOptions, SlugTranslationOptions, TranslationJob } from '../types'
 import { translateDocument, mergePreservingExisting } from '../engine/document-translator'
 import { defaultSlugify } from '../engine/slugifier'
+import { translateSchemaJSONLD } from '../engine/schema-translator'
 
 export interface QueueStats {
   queued: number
@@ -22,6 +23,7 @@ export interface TranslationQueueOptions {
   customValuePatterns?: (string | RegExp)[]
   fallbackRetry?: FallbackRetryOptions
   slug?: SlugTranslationOptions
+  schema?: SchemaTranslationOptions
   collections?: Record<string, boolean | CollectionConfigOptions>
 }
 
@@ -39,6 +41,7 @@ export class TranslationQueue {
   private customValuePatterns?: (string | RegExp)[]
   private fallbackRetry?: FallbackRetryOptions
   private slugOptions?: SlugTranslationOptions
+  private schemaOptions?: SchemaTranslationOptions
   private collectionsConfig?: Record<string, boolean | CollectionConfigOptions>
   private concurrency: number
 
@@ -58,6 +61,7 @@ export class TranslationQueue {
     this.customValuePatterns = options.customValuePatterns
     this.fallbackRetry = options.fallbackRetry
     this.slugOptions = options.slug
+    this.schemaOptions = options.schema
     this.collectionsConfig = options.collections
     if (options.excludedFieldsMap) {
       for (const [key, fields] of Object.entries(options.excludedFieldsMap)) {
@@ -138,9 +142,14 @@ export class TranslationQueue {
     }
 
     const perCollectionExcluded = this.excludedFieldsMap.get(job.slug) || []
+    const schemaFieldExclusions = this.schemaOptions?.enabled
+      ? ['schema', 'overrideDefaultSchema', ...(this.schemaOptions.fieldPaths || ['meta.schema'])]
+      : []
+
     const excludedFields = [
       ...perCollectionExcluded,
       ...(this.customFieldExclusions || []),
+      ...schemaFieldExclusions,
     ]
 
     // Determine whether slug translation is enabled for this collection
@@ -248,6 +257,43 @@ export class TranslationQueue {
 
               // Safe fallback: never let slug be empty
               mergedData.slug = targetSlug || sourceSlug
+            }
+          }
+        }
+
+        // 5. Handle optional Schema.org JSON-LD translation and URL localization
+        if (this.schemaOptions?.enabled) {
+          const sourceSchema = job.data?.meta?.schema || job.data?.schema
+          const existingSchema = existingDoc?.meta?.schema || existingDoc?.schema
+
+          if (sourceSchema && (!existingSchema || this.schemaOptions.overwriteExisting)) {
+            const localizedSchema = await translateSchemaJSONLD(
+              sourceSchema,
+              targetLocale,
+              job.sourceLocale,
+              this.engineUrl,
+              this.apiKey,
+              this.schemaOptions,
+              this.customValueExclusions,
+              this.customValuePatterns,
+              this.fallbackRetry,
+            )
+
+            if (job.data?.meta?.schema !== undefined) {
+              if (!mergedData.meta) mergedData.meta = {}
+              mergedData.meta.schema = localizedSchema
+            } else if (job.data?.schema !== undefined) {
+              mergedData.schema = localizedSchema
+            }
+          }
+
+          // Sync overrideDefaultSchema flag if configured (default true)
+          if (this.schemaOptions.syncOverrideFlag !== false) {
+            if (job.data?.meta?.overrideDefaultSchema !== undefined) {
+              if (!mergedData.meta) mergedData.meta = {}
+              mergedData.meta.overrideDefaultSchema = Boolean(job.data?.meta?.overrideDefaultSchema)
+            } else if (job.data?.overrideDefaultSchema !== undefined) {
+              mergedData.overrideDefaultSchema = Boolean(job.data?.overrideDefaultSchema)
             }
           }
         }
