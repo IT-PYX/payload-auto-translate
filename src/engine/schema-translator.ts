@@ -29,6 +29,10 @@ const TRANSLATABLE_SCHEMA_PROPERTIES = new Set([
   'disambiguatingDescription',
   'reviewBody',
   'serviceType',
+  'slogan',
+  'areaServed',
+  'award',
+  'abstract',
 ])
 
 /**

@@ -15,6 +15,18 @@ describe('Schema.org JSON-LD Translator & Localizer', () => {
         '@id': 'https://www.iclimaair.com/#organization',
         name: 'iClima',
         url: 'https://www.iclimaair.com/',
+        slogan: 'Air Conditioner Manufacturer in China for Distributors & Importers',
+        areaServed: 'Worldwide',
+        description: 'Direct air conditioner factory in China.',
+        knowsAbout: ['Inverter split air conditioners', 'R32 refrigerant'],
+        contactPoint: [
+          {
+            '@type': 'ContactPoint',
+            url: 'https://www.iclimaair.com/contact',
+            areaServed: 'Worldwide',
+            contactType: 'sales',
+          },
+        ],
         logo: {
           '@type': 'ImageObject',
           '@id': 'https://www.iclimaair.com/#logo',
@@ -76,6 +88,13 @@ describe('Schema.org JSON-LD Translator & Localizer', () => {
     assert.ok(strings.has('iClimaAir is a direct factory manufacturer in Shunde, China.'))
     assert.ok(strings.has('Inverter Split Air Conditioner'))
     assert.ok(strings.has('9,000-24,000 BTU wall mounted R32 unit.'))
+
+    // Should include Organization slogan, areaServed, description, and knowsAbout items
+    assert.ok(strings.has('Air Conditioner Manufacturer in China for Distributors & Importers'))
+    assert.ok(strings.has('Worldwide'))
+    assert.ok(strings.has('Direct air conditioner factory in China.'))
+    assert.ok(strings.has('Inverter split air conditioners'))
+    assert.ok(strings.has('R32 refrigerant'))
 
     // Should NOT include Organization name or Brand name
     assert.ok(!strings.has('iClima'))
@@ -147,6 +166,11 @@ describe('Schema.org JSON-LD Translator & Localizer', () => {
       ['iClimaAir is a direct factory manufacturer in Shunde, China.', 'iClimaAir es un fabricante directo en Shunde, China.'],
       ['Inverter Split Air Conditioner', 'Aire acondicionado split inverter'],
       ['9,000-24,000 BTU wall mounted R32 unit.', 'Unidad R32 de 9.000 a 24.000 BTU.'],
+      ['Air Conditioner Manufacturer in China for Distributors & Importers', 'Fabricante de aire acondicionado en China para distribuidores e importadores'],
+      ['Worldwide', 'Mundial'],
+      ['Direct air conditioner factory in China.', 'Fábrica directa de aire acondicionado en China.'],
+      ['Inverter split air conditioners', 'Acondicionadores de aire split inverter'],
+      ['R32 refrigerant', 'Refrigerante R32'],
     ])
 
     const localized = applySchemaTranslations(sampleGraphSchema, translationMap, 'es', { siteUrl })
@@ -158,6 +182,13 @@ describe('Schema.org JSON-LD Translator & Localizer', () => {
     const org = localized['@graph'][0]
     assert.equal(org.name, 'iClima') // Brand name preserved
     assert.equal(org['@id'], 'https://www.iclimaair.com/#organization') // Global singleton preserved
+    assert.equal(org.slogan, 'Fabricante de aire acondicionado en China para distribuidores e importadores')
+    assert.equal(org.areaServed, 'Mundial')
+    assert.equal(org.description, 'Fábrica directa de aire acondicionado en China.')
+    assert.equal(org.knowsAbout[0], 'Acondicionadores de aire split inverter')
+    assert.equal(org.knowsAbout[1], 'Refrigerante R32')
+    assert.equal(org.contactPoint[0].url, 'https://www.iclimaair.com/es/contact')
+    assert.equal(org.contactPoint[0].areaServed, 'Mundial')
 
     const webPage = localized['@graph'][2]
     assert.equal(webPage.inLanguage, 'es')
