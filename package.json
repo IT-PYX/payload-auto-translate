@@ -55,7 +55,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "test": "node tests/plugin.test.mjs",
+    "test": "node tests/plugin.test.mjs && node tests/schema-translator.test.mjs",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run build && npm test"
   },
