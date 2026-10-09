@@ -263,37 +263,58 @@ export class TranslationQueue {
 
         // 5. Handle optional Schema.org JSON-LD translation and URL localization
         if (this.schemaOptions?.enabled) {
-          const sourceSchema = job.data?.meta?.schema || job.data?.schema
-          const existingSchema = existingDoc?.meta?.schema || existingDoc?.schema
+          const pathsToCheck =
+            this.schemaOptions.fieldPaths && this.schemaOptions.fieldPaths.length > 0
+              ? this.schemaOptions.fieldPaths
+              : ['seo.schema', 'meta.schema', 'schema']
 
-          if (sourceSchema && (!existingSchema || this.schemaOptions.overwriteExisting)) {
-            const localizedSchema = await translateSchemaJSONLD(
-              sourceSchema,
-              targetLocale,
-              job.sourceLocale,
-              this.engineUrl,
-              this.apiKey,
-              this.schemaOptions,
-              this.customValueExclusions,
-              this.customValuePatterns,
-              this.fallbackRetry,
-            )
+          const getNested = (obj: any, path: string) => {
+            if (!obj) return undefined
+            return path.split('.').reduce((acc, part) => (acc ? acc[part] : undefined), obj)
+          }
 
-            if (job.data?.meta?.schema !== undefined) {
-              if (!mergedData.meta) mergedData.meta = {}
-              mergedData.meta.schema = localizedSchema
-            } else if (job.data?.schema !== undefined) {
-              mergedData.schema = localizedSchema
+          const setNested = (obj: any, path: string, val: any) => {
+            const parts = path.split('.')
+            let cur = obj
+            for (let i = 0; i < parts.length - 1; i++) {
+              if (!cur[parts[i]]) cur[parts[i]] = {}
+              cur = cur[parts[i]]
+            }
+            cur[parts[parts.length - 1]] = val
+          }
+
+          for (const path of pathsToCheck) {
+            const sourceSchema = getNested(job.data, path)
+            const existingSchema = getNested(existingDoc, path)
+
+            if (sourceSchema && (!existingSchema || this.schemaOptions.overwriteExisting)) {
+              const localizedSchema = await translateSchemaJSONLD(
+                sourceSchema,
+                targetLocale,
+                job.sourceLocale,
+                this.engineUrl,
+                this.apiKey,
+                this.schemaOptions,
+                this.customValueExclusions,
+                this.customValuePatterns,
+                this.fallbackRetry,
+              )
+              setNested(mergedData, path, localizedSchema)
             }
           }
 
           // Sync overrideDefaultSchema flag if configured (default true)
           if (this.schemaOptions.syncOverrideFlag !== false) {
-            if (job.data?.meta?.overrideDefaultSchema !== undefined) {
-              if (!mergedData.meta) mergedData.meta = {}
-              mergedData.meta.overrideDefaultSchema = Boolean(job.data?.meta?.overrideDefaultSchema)
-            } else if (job.data?.overrideDefaultSchema !== undefined) {
-              mergedData.overrideDefaultSchema = Boolean(job.data?.overrideDefaultSchema)
+            const overridePaths = [
+              'seo.overrideDefaultSchema',
+              'meta.overrideDefaultSchema',
+              'overrideDefaultSchema',
+            ]
+            for (const path of overridePaths) {
+              const srcFlag = getNested(job.data, path)
+              if (srcFlag !== undefined) {
+                setNested(mergedData, path, Boolean(srcFlag))
+              }
             }
           }
         }
